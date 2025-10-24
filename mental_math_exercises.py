@@ -121,35 +121,93 @@ class Quiz:
     print(self.get_summary())
 
 
-  def html_quiz(self, columns: int = 4, horizontal: bool = False) -> (str, str):
-    """Return (questions_html, answers_html) worksheets using MathJax."""
-    head = '''
+  def html_quiz(self,
+                columns: int = 4,
+                horizontal: bool = False,
+                auto_font: bool = True,
+                page_width_in: float = 8.5,
+                page_height_in: float = 11.0,
+                margin_in: float = 0.5) -> (str, str):
+    """Return (questions_html, answers_html) worksheets using MathJax.
+    auto_font: compute a font size so the problems fit one US Letter page.
+    horizontal: pass True for inline (a + b), False for vertical layout.
+    """
+    import math
+    count = len(self.problems)
+    if columns < 1:
+      columns = 1
+    rows = math.ceil(count / columns)
+
+    # Heuristic line count per problem
+    lines_per = 1 if horizontal else 5  # vertical array ~5 lines
+    # Page content area (px) using 96px = 1in
+    px_per_in = 96.0
+    content_height_px = (page_height_in - 2 * margin_in) * px_per_in
+    content_width_px  = (page_width_in  - 2 * margin_in) * px_per_in
+
+    # Height-constrained font size
+    if auto_font:
+      font_size_h = content_height_px / (rows * lines_per * 1.25)
+      # Width-constrained (estimate chars per problem)
+      avg_chars = 8 if horizontal else 4
+      font_size_w = content_width_px / (columns * avg_chars * 0.65)
+      font_size = int(max(14, min(font_size_h, font_size_w, 48)))
+    else:
+      font_size = 20
+
+    head = f'''
 <!DOCTYPE html>
 <html>
 <head>
 <title>Mental Math Worksheet</title>
 <meta charset="utf-8"/>
 <script type="text/javascript" id="MathJax-script" async
-  src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js">
-</script>
+  src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
 <style>
-table { border-collapse: collapse; }
-td { padding: 6px 12px; vertical-align: top; }
-h2 { margin-top: 1.5em; }
+  @page {{
+    size: {page_width_in}in {page_height_in}in;
+    margin: {margin_in}in;
+  }}
+  body {{
+    font-family: "Helvetica", "Arial", sans-serif;
+    font-size: {font_size}px;
+    line-height: 1.15;
+    margin: 0;
+    -webkit-print-color-adjust: exact;
+  }}
+  h2 {{ margin: 0 0 0.4em 0; font-size: {int(font_size*1.1)}px; }}
+  table {{
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+  }}
+  td {{
+    width: {100/columns:.4f}%;
+    padding: 0.25em 0.4em;
+    vertical-align: top;
+    overflow: hidden;
+  }}
+  .answers h2 {{ page-break-before: always; }}
+  @media print {{
+    .nobreak {{ page-break-inside: avoid; }}
+  }}
 </style>
 </head>
 <body>
 '''
     qs = head + '<h2>Questions</h2><table>\n<tr>'
-    ans = head + '<h2>Answers</h2><table>\n<tr>'
+    ans = head + '<h2>Answers</h2><table class="answers">\n<tr>'
     m = 0
     for problem in self.problems:
-      q, a = problem.to_latex(horizontal=horizontal)
+      try:
+        q, a = problem.to_latex(horizontal=horizontal)
+      except TypeError:
+        q, a = problem.to_latex()
       if m and (m % columns) == 0:
         qs += '\n</tr><tr>'
         ans += '\n</tr><tr>'
-      qs += f'\n  <td>\\({q}\\)</td>'
-      ans += f'\n  <td>\\({a}\\)</td>'
+      qs += f'\n  <td class="nobreak">\\({q}\\)</td>'
+      ans += f'\n  <td class="nobreak">\\({a}\\)</td>'
       m += 1
     qs += '\n</tr>\n</table>\n</body>\n</html>'
     ans += '\n</tr>\n</table>\n</body>\n</html>'
@@ -728,33 +786,43 @@ class Modulo(ProblemInterface):
     a = f'{q} = {self.answer}'
     return q, a
 
-
 if __name__ == '__main__':
   # Example 1: Create an HTML worksheet (questions + answers)
-  quiz_add = Addition.generate_quiz(num_problems=12, digits_1=2, digits_2=2, pause=5)
-  qs_html, ans_html = quiz_add.html_quiz(columns=4, horizontal=True)
-  with open('addition_questions.html', 'w') as f:
+  # Vertical addition worksheet auto-sized
+  quiz_add = Addition.generate_quiz(num_problems=40, digits_1=2, digits_2=2, pause=3)
+  qs_html, ans_html = quiz_add.html_quiz(columns=5, horizontal=False, auto_font=True)
+  with open('addition_vertical_questions.html', 'w') as f:
     f.write(qs_html)
-  with open('addition_answers.html', 'w') as f:
+  with open('addition_vertical_answers.html', 'w') as f:
     f.write(ans_html)
-  print('Saved addition_questions.html and addition_answers.html')
+  print('Saved addition_vertical_questions.html and addition_vertical_answers.html')
 
-  # Example 2: Audible (if androidhelper present) date problems, no grading
+  # Example 2: Create an HTML worksheet (questions + answers)
+  # Horizontal multiplication worksheet
+  mult_quiz = Multiplication.generate_quiz(num_problems=60, digits_1=2, digits_2=1, pause=3)
+  qs_html, ans_html = mult_quiz.html_quiz(columns=6, horizontal=True, auto_font=True)
+  with open('multiplication_questions.html', 'w') as f:
+    f.write(qs_html)
+  with open('multiplication_answers.html', 'w') as f:
+    f.write(ans_html)
+  print('Saved multiplication_questions.html and multiplication_answers.html')
+
+  # Example 3: Audible (if androidhelper present) date problems, no grading
   dow_quiz = DayOfTheWeek.generate_quiz(num_problems=5, pause=4)
   print('Starting audible day-of-week practice (no input required)...')
   dow_quiz.worksheet(speak=True, write=False, grade=False)
 
-  # Example 3: Terminal input + grading for multiplication
+  # Example 4: Terminal input + grading for multiplication
   mult_quiz = Multiplication.generate_quiz(num_problems=5, digits_1=2, digits_2=1, pause=3)
   print('Starting multiplication quiz (enter answers)...')
   mult_quiz.worksheet(speak=False, write=True, grade=True)
 
-  # Example 4: Approximate roots with tolerance
+  # Example 5: Approximate roots with tolerance
   roots_quiz = Roots.generate_quiz(num_problems=3, digits=3, power=2, abs_tol=0.05)
   print('Approximate square roots (enter decimal answers)...')
   roots_quiz.worksheet(speak=False, write=True, grade=True)
 
-  # Example 5: Modulo practice
+  # Example 6: Modulo practice
   mod_quiz = Modulo.generate_quiz(num_problems=5, digits=4, modulo=9)
   print('Modulo quiz (enter remainder)...')
   mod_quiz.worksheet(speak=False, write=True, grade=True)
