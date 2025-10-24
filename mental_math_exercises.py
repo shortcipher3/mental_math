@@ -121,62 +121,53 @@ class Quiz:
     print(self.get_summary())
 
 
-  def html_quiz(self, columns :int=4, horizontal: bool=False) -> str:
-    qs = '''
+  def html_quiz(self, columns: int = 4, horizontal: bool = False) -> (str, str):
+    """Return (questions_html, answers_html) worksheets using MathJax."""
+    head = '''
 <!DOCTYPE html>
 <html>
 <head>
-<title>MathJax TeX Test Page</title>
+<title>Mental Math Worksheet</title>
+<meta charset="utf-8"/>
 <script type="text/javascript" id="MathJax-script" async
   src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js">
 </script>
+<style>
+table { border-collapse: collapse; }
+td { padding: 6px 12px; vertical-align: top; }
+h2 { margin-top: 1.5em; }
+</style>
 </head>
 <body>
-<table>
- '''
-    anns = qs
+'''
+    qs = head + '<h2>Questions</h2><table>\n<tr>'
+    ans = head + '<h2>Answers</h2><table>\n<tr>'
     m = 0
     for problem in self.problems:
       q, a = problem.to_latex(horizontal=horizontal)
-      if m==0:
-        qs = f'''{qs}
-  <tr>'''
-        anns = f'''{anns}
-  <tr>'''
-      elif (m%columns) == 0:
-        qs = f'''{qs}
-  </tr>
-  <tr>'''
-        anns = f'''{anns}
-  </tr>
-  <tr>'''
-      m = m+1
-      qs = f'''{qs}
-    <td>
-      {q}
-    </td>'''
-      anns = f'''{anns}
-    <td>
-      {a}
-    </td>'''
-    qs = f'''{qs}
-  </tr>
-</html>
-</table>
-</body>
-'''
-    anns = f'''{anns}
-  </tr>
-</html>
-</table>
-</body>
-'''
-    return qs, anns
+      if m and (m % columns) == 0:
+        qs += '\n</tr><tr>'
+        ans += '\n</tr><tr>'
+      qs += f'\n  <td>\\({q}\\)</td>'
+      ans += f'\n  <td>\\({a}\\)</td>'
+      m += 1
+    qs += '\n</tr>\n</table>\n</body>\n</html>'
+    ans += '\n</tr>\n</table>\n</body>\n</html>'
+    return qs, ans
 
 
   def get_summary(self):
     if not self.finished:
       raise RuntimeError("Complete the worksheet before getting a summary")
+    # Handle non-graded worksheets safely
+    if len(self.times) == 0 or len(self.grades) == 0:
+      summary = {
+        "quiz_date": datetime.now().isoformat(),
+        "problem_types": [t for t in np.unique(self.types)],
+        "problem_count": len(self.problems),
+        "graded": False
+      }
+      return json.dumps(summary)
     summary = {
                 "quiz_date": datetime.now().isoformat(),
                 "problem_types": [t for t in np.unique(self.types)],
@@ -189,8 +180,10 @@ class Quiz:
                 "median_time": float(np.median(self.times)),
                 "std_time": float(np.std(self.times)),
                 "correct": float(np.mean(self.grades)),
+                "graded": True
               }
     return json.dumps(summary)
+
 
 class DayOfTheWeek(ProblemInterface):
   '''
@@ -582,89 +575,6 @@ class Division(ProblemInterface):
     return q, a
 
 
-class Powers(ProblemInterface):
-  '''Practice exponentiation'''
-
-  def generate_quiz(num_problems, digits=2, power=2, pause=30):# -> Quiz:
-    rng = range(10**(digits-1), 10**digits)
-    x = choice(rng, (num_problems, ),
-               False if num_problems<(10**digits) else True)
-    problems = []
-    for a in x:
-      problems.append(Roots(a, power, pause))
-    return Quiz(problems)
-
-  def __init__(self, value, power, pause=30):
-      super(Roots, self).__init__(pause)
-      self.value = value
-      self.power = power
-      self.answer = value**power
-
-  def human_readable(self) -> (str, str):
-    problem = f'{self.value} to the power of {self.power}'
-    q = f'What is {problem}?'
-    a = f'{problem} equals {self.answer}'
-    return q, a
-
-  def match_answer(self, answer) -> bool:
-    try:
-      answer = int(answer)
-    except:
-      pass
-    return answer == self.answer
-
-  def to_latex(self) -> (str, str):
-    p = f'{self.value}^{self.power}'
-    a = f'{p}={self.answer}'
-    return p, a
-
-
-class Roots(ProblemInterface):
-  '''
-  Practice getting approximate roots of n
-  digit numbers
-  '''
-
-  def generate_quiz(num_problems, digits=2, power=2, pause=30, abs_tol=0.1):# -> Quiz:
-    rng = range(10**(digits-1), 10**digits)
-    x = choice(rng, (num_problems, ),
-               False if num_problems<(10**digits) else True)
-    problems = []
-    for a in x:
-      problems.append(Roots(a, power, pause))
-    return Quiz(problems)
-
-  def __init__(self, raised_value, power, pause=30):
-    problems.append(Roots(a, power, pause, abs_tol))
-    return Quiz(problems)
-
-  def __init__(self, raised_value, power, pause=30, abs_tol=0.1):
-      super(Roots, self).__init__(pause)
-      self.raised_value = raised_value
-      self.power = power
-      self.answer = raised_value**(1.0/power)
-      self.abs_tol = abs_tol
-
-  def human_readable(self) -> (str, str):
-    problem = f'{self.power} root of {self.raised_value}'
-    q = f'What is the {problem}?'
-    a = f'The {problem} is {self.answer}'
-    return q, a
-
-  def match_answer(self, answer) -> bool:
-    try:
-      answer = float(answer)
-      return math.isclose(answer, self.answer, abs_tol=self.abs_tol)
-    except:
-      pass
-    return answer == self.answer
-
-  def to_latex(self) -> (str, str):
-    q = f'\\sqrt[{self.power}]{{{self.raised_value}}}'
-    a = f'{q}={self.answer}'
-    return q, a
-
-
 class WholeRoots(ProblemInterface):
   '''
   Practice getting whole roots of n digit
@@ -705,8 +615,146 @@ class WholeRoots(ProblemInterface):
     return q, a
 
 
-class Modulo(ProblemInterface):
-  ''' Practice modulo '''
+class Powers(ProblemInterface):
+  '''Practice exponentiation'''
 
-  def generate_quiz(num_problems, digits=6, modulo=9, pause=30):# -> Quiz:
-    rn
+  def generate_quiz(num_problems, digits=2, power=2, pause=30):  # -> Quiz:
+    rng = range(10**(digits-1), 10**digits)
+    x = choice(rng, (num_problems,),
+               replace=False if num_problems < (10**digits) else True)
+    problems = []
+    for a in x:
+      problems.append(Powers(a, power, pause))
+    return Quiz(problems)
+
+  def __init__(self, value, power, pause=30):
+      super(Powers, self).__init__(pause)
+      self.value = value
+      self.power = power
+      self.answer = value ** power
+
+  def human_readable(self) -> (str, str):
+    problem = f'{self.value} to the power of {self.power}'
+    q = f'What is {problem}?'
+    a = f'{problem} equals {self.answer}'
+    return q, a
+
+  def match_answer(self, answer) -> bool:
+    try:
+      answer = int(answer)
+    except:
+      pass
+    return answer == self.answer
+
+  def to_latex(self) -> (str, str):
+    p = f'{self.value}^{self.power}'
+    a = f'{p} = {self.answer}'
+    return p, a
+
+
+class Roots(ProblemInterface):
+  '''
+  Practice getting approximate roots of n
+  digit numbers
+  '''
+
+  def generate_quiz(num_problems, digits=2, power=2, pause=30, abs_tol=0.1):  # -> Quiz:
+    rng = range(10**(digits-1), 10**digits)
+    x = choice(rng, (num_problems,),
+               replace=False if num_problems < (10**digits) else True)
+    problems = []
+    for a in x:
+      problems.append(Roots(a, power, pause, abs_tol))
+    return Quiz(problems)
+
+  def __init__(self, raised_value, power, pause=30, abs_tol=0.1):
+      super(Roots, self).__init__(pause)
+      self.raised_value = raised_value
+      self.power = power
+      self.answer = raised_value ** (1.0 / power)
+      self.abs_tol = abs_tol
+
+  def human_readable(self) -> (str, str):
+    problem = f'{self.power} root of {self.raised_value}'
+    q = f'What is the {problem}?'
+    a = f'The {problem} is {self.answer}'
+    return q, a
+
+  def match_answer(self, answer) -> bool:
+    try:
+      answer = float(answer)
+      return math.isclose(answer, self.answer, abs_tol=self.abs_tol)
+    except:
+      return False
+
+  def to_latex(self) -> (str, str):
+    q = f'\\sqrt[{self.power}]{{{self.raised_value}}}'
+    a = f'{q} = {self.answer}'
+    return q, a
+
+
+class Modulo(ProblemInterface):
+  '''Practice modulo'''
+
+  def generate_quiz(num_problems, digits=3, modulo=9, pause=30):  # -> Quiz:
+    rng = range(10**(digits-1), 10**digits)
+    xs = choice(rng, (num_problems,),
+                replace=False if num_problems < (10**digits) else True)
+    problems = []
+    for v in xs:
+      problems.append(Modulo(v, modulo, pause))
+    return Quiz(problems)
+
+  def __init__(self, value, modulo, pause=30):
+    super(Modulo, self).__init__(pause)
+    self.value = value
+    self.modulo = modulo
+    self.answer = value % modulo
+
+  def human_readable(self) -> (str, str):
+    q = f'What is {self.value} mod {self.modulo}?'
+    a = f'{self.value} mod {self.modulo} equals {self.answer}'
+    return q, a
+
+  def match_answer(self, answer) -> bool:
+    try:
+      answer = int(answer)
+    except:
+      return False
+    return answer == self.answer
+
+  def to_latex(self) -> (str, str):
+    q = f'{self.value} \\bmod {self.modulo}'
+    a = f'{q} = {self.answer}'
+    return q, a
+
+
+if __name__ == '__main__':
+  # Example 1: Create an HTML worksheet (questions + answers)
+  quiz_add = Addition.generate_quiz(num_problems=12, digits_1=2, digits_2=2, pause=5)
+  qs_html, ans_html = quiz_add.html_quiz(columns=4, horizontal=True)
+  with open('addition_questions.html', 'w') as f:
+    f.write(qs_html)
+  with open('addition_answers.html', 'w') as f:
+    f.write(ans_html)
+  print('Saved addition_questions.html and addition_answers.html')
+
+  # Example 2: Audible (if androidhelper present) date problems, no grading
+  dow_quiz = DayOfTheWeek.generate_quiz(num_problems=5, pause=4)
+  print('Starting audible day-of-week practice (no input required)...')
+  dow_quiz.worksheet(speak=True, write=False, grade=False)
+
+  # Example 3: Terminal input + grading for multiplication
+  mult_quiz = Multiplication.generate_quiz(num_problems=5, digits_1=2, digits_2=1, pause=3)
+  print('Starting multiplication quiz (enter answers)...')
+  mult_quiz.worksheet(speak=False, write=True, grade=True)
+
+  # Example 4: Approximate roots with tolerance
+  roots_quiz = Roots.generate_quiz(num_problems=3, digits=3, power=2, abs_tol=0.05)
+  print('Approximate square roots (enter decimal answers)...')
+  roots_quiz.worksheet(speak=False, write=True, grade=True)
+
+  # Example 5: Modulo practice
+  mod_quiz = Modulo.generate_quiz(num_problems=5, digits=4, modulo=9)
+  print('Modulo quiz (enter remainder)...')
+  mod_quiz.worksheet(speak=False, write=True, grade=True)
